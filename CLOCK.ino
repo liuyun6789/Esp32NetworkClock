@@ -2,9 +2,9 @@
 #include "time.h"
 #include <ArduinoJson.h>
 #include <HTTPClient.h>
-#include "SPI.h"
+//#include "SPI.h"
 #include <Arduino_GFX_Library.h>
-#include "FreeSansBold18ptClock.h"
+#include "lcd24pt.h"
 #include "FreeSans10pt7b.h"
 #include "pf10pt.h"
 #include "bg.h"
@@ -26,6 +26,7 @@ Arduino_GFX *gfx =new Arduino_ILI9225(bus, 26 /* RST */,1);
 // #define TFT_LED 0   // 0 if wired to +5V directly
 
 int y=0;
+int updatetime=0;
 /*
 'rh': '相对湿度(%)',
 'temp': '温度',
@@ -38,7 +39,7 @@ int y=0;
 */
 
 
-const char* ntpServer = "pool.ntp.org";
+const char* ntpServer = "time.windows.com";
 const long  gmtOffset_sec = 28800;
 const int   daylightOffset_sec = 0;
 
@@ -55,6 +56,15 @@ String aqiSeverity = "";
 float windSpd=0.0;
 
 
+//buffer
+int temp1 = 0;
+String pvdrCap1 = "";
+String aqiSeverity1 = "";
+float windSpd1=0.0;
+int rh1 = 0;
+String date1;
+String time1;
+
 void printLocalTime()
 {
   struct tm timeinfo;
@@ -69,8 +79,10 @@ void showtime()
 {
   struct tm timeinfo;
   if (!getLocalTime(&timeinfo)) {
+    tftprint("Failed to get time,Retrying...");
     return;
   }
+  // tftprint("Time get success.");
   char datestr[20];
   char tmstr[20];
   time_t rawtime;
@@ -81,19 +93,49 @@ void showtime()
   strftime(datestr, 20, "%Y-%m-%d %A", info);
   strftime(tmstr, 20, "%H:%M", info);
   // gfx->draw24bitRGBBitmap(0,0,,220,176)
-  gfx->draw24bitRGBBitmap(0,0,bmp_bg,220,176);
-  gfx->setCursor(22, 70);
-  gfx->setFont(&FreeSansBold18pt7b);
-  gfx->setTextColor(BLACK);
-  gfx->println(tmstr);
-  gfx->setCursor(2,170);
-  gfx->setFont(&FreeSans10pt7b);
-  gfx->setTextColor(BLACK);
-  gfx->println(datestr);
+
+  // gfx->draw24bitRGBBitmap(0,0,bmp_bg,220,176);
+
+  if(String(tmstr)!=time1)
+  {
+    gfx->setCursor(12, 65);
+    gfx->setFont(&lcd30pt7b);
+
+    gfx->setTextColor(WHITE);
+    gfx->println("/////");
+    gfx->setCursor(12, 65);
+    gfx->setTextColor(BLACK);
+    gfx->println(tmstr);
+  }
+
+  if (String(datestr)!=date1)
+  {
+    gfx->setCursor(2,170);
+    gfx->setFont(&FreeSans10pt7b);
+
+    gfx->setTextColor(WHITE);
+    gfx->println("\x1f\x1f\x1f\x1f\x1f\x1f\x1f\x1f\x1f\x1f\x1f\x1f\x1f\x1f\x1f\x1f\x1f\x1f\x1f\x1f\x1f\x1f");
+
+    gfx->setCursor(2,170);
+    gfx->setTextColor(BLACK);
+    gfx->println(datestr);
+  }
+  
+  date1=String(datestr);
+  time1=String(tmstr);
+
   Serial.println(datestr);
   Serial.println(tmstr);
+  updatetime+=1;
+  if (updatetime>=360)
+  {
+    getweather();
+    updatetime=0;
+  }
+  
   showWeather();
 }
+
 void printcn(String txt) {
   Serial.println(txt);
   txt.replace("东", "\x7f");
@@ -176,27 +218,58 @@ void printcn(String txt) {
 
 void showWeather(){
   gfx->setFont(&pf_min_ys10pt8b);
-  gfx->setTextColor(BLACK);
 
+  
   gfx->setCursor(28,16);
   printcn(city);
 
-  gfx->setCursor(79,16);
-  printcn(pvdrCap);
+  if(pvdrCap!=pvdrCap1||temp!=temp1||rh1!=rh||aqiSeverity1!=aqiSeverity||windSpd1!=windSpd)
+  {
 
-  gfx->setCursor(28,100+12);
-  gfx->println(String(temp));
+    gfx->setCursor(79,16);
+    gfx->setTextColor(WHITE);
+    gfx->println("\x1f\x1f\x1f");
+    gfx->setCursor(79,16);
+    gfx->setTextColor(BLACK);
+    printcn(pvdrCap);
 
-  gfx->setCursor(90,100+12);
-  gfx->println(String(rh));
+    gfx->setCursor(28,100+12);
+    gfx->setTextColor(WHITE);
+    gfx->println("\x1f\x1f");
+    gfx->setTextColor(BLACK);
+    gfx->setCursor(28,100+12);
+    gfx->println(String(temp));
 
-  gfx->setCursor(28,128+12);
-  printcn(aqiSeverity);
+    gfx->setCursor(90,100+12);
+    gfx->setTextColor(WHITE);
+    gfx->println("\x1f\x1f");
+    gfx->setTextColor(BLACK);
+    gfx->setCursor(90,100+12);
+    gfx->println(String(rh));
 
-  gfx->setCursor(110,128+12);
-  gfx->println(String(int(windSpd))+"km/h");
+    gfx->setCursor(28,128+12);
+    gfx->setTextColor(WHITE);
+    gfx->println("\x1f\x1f\x1f");
+    gfx->setTextColor(BLACK);
+    gfx->setCursor(28,128+12);
+    printcn(aqiSeverity);
+
+    gfx->setCursor(110,128+12);
+    gfx->setTextColor(WHITE);
+    gfx->println("\x1f\x1f");
+    gfx->setTextColor(BLACK);
+    gfx->setCursor(110,128+12);
+    gfx->println(String(int(windSpd))+"km/h");
+  }
+  
+  aqiSeverity1=aqiSeverity;
+  temp1=temp;
+  rh1=rh;
+  pvdrCap1=pvdrCap;
+
 
 }
+
 void SmartConfig()
 {
   WiFi.mode(WIFI_STA);
@@ -232,7 +305,6 @@ void SmartConfig()
 
 bool AutoConfig()
 {
-  WiFi.begin();
   for (int i = 0; i < 25; i++)
   {
     int wstatus = WiFi.status();
@@ -264,6 +336,8 @@ bool AutoConfig()
 
 
 }
+
+
 void tftprint(String txt) {
   // int offset=sizeof(txt);
   gfx->setCursor(10, 10+y);
@@ -275,6 +349,7 @@ void tftprint(String txt) {
     gfx->fillScreen(BACKGROUND);
   }
 }
+
 void setup() {
   Serial.begin(115200);
   gfx->begin();
@@ -293,7 +368,10 @@ void setup() {
   getlocation();
   tftprint("Getting weather...");
   getweather();
+
+  gfx->draw24bitRGBBitmap(0,0,bmp_bg,220,176);
 }
+
 void getlocation() {
   DynamicJsonDocument doc(1024);
   HTTPClient http;
@@ -321,13 +399,14 @@ void getlocation() {
 
   http.end(); // 结束当前连接
 }
+
 void getweather() {
   DynamicJsonDocument doc(1024);
   HTTPClient http;
-  String url="https://api.msn.com/weather/overview?locale=zh-cn&lat="+String(lat)+"&lon="+String(lon)+"&units=C&market=China&region=cn&appId=4de6fc9f-3262-47bf-9c99-e189a8234fa2&apiKey=UhJ4G66OjyLbn9mXARgajXLiLw6V75sHnfpU60aJBB&ocid=weather-peregrine&wrapOData=false";
-  http.begin("https://api.msn.cn/weather/current?latLongList=33.13815%2C111.49078&locale=zh-cn&units=C&appId=9e21380c-ff19-4c78-b4ea-19558e93a5d3&apiKey=j5i4gDqHL6nGYwx5wi5kRhXjtf2c5qgFX9fzfk0TOo&ocid=msftweather&wrapOData=false");
+  // String url="https://api.msn.com/weather/overview?locale=zh-cn&lat="+String(lat)+"&lon="+String(lon)+"&units=C&market=China&region=cn&appId=4de6fc9f-3262-47bf-9c99-e189a8234fa2&apiKey=UhJ4G66OjyLbn9mXARgajXLiLw6V75sHnfpU60aJBB&ocid=weather-peregrine&wrapOData=false";
+  http.begin("https://api.msn.cn/weather/current?latLongList="+String(lat)+"%2C"+String(lon)+"&locale=zh-cn&units=C&appId=9e21380c-ff19-4c78-b4ea-19558e93a5d3&apiKey=j5i4gDqHL6nGYwx5wi5kRhXjtf2c5qgFX9fzfk0TOo&ocid=msftweather&wrapOData=false");
   // http.begin(url);
-  Serial.println(url);
+  // Serial.println(url);
   int httpCode = http.GET();
   if (httpCode == 200)
   {
@@ -337,13 +416,14 @@ void getweather() {
     deserializeJson(doc, resBuff);
     JsonObject root = doc.as<JsonObject>();
     JsonObject weather=root["responses"][0]["weather"][0]["current"];
+
     pvdrCap=weather["cap"].as<String>();
     temp=weather["temp"];
     rh=weather["rh"];
     aqi=weather["aqi"];
     aqiSeverity=weather["aqiSeverity"].as<String>();
     windSpd=weather["windSpd"];
-    Serial.println(weather);
+
   }
   else {
     Serial.println("Location get error!");
@@ -352,6 +432,7 @@ void getweather() {
 
   http.end(); // 结束当前连接
 }
+
 void loop() {
   delay(5000);
   printLocalTime();
